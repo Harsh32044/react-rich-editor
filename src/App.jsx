@@ -1,3 +1,4 @@
+import Description from "./components/Description";
 import MyEditor from "./components/MyEditor";
 import Navbar from "./components/Navbar";
 
@@ -8,6 +9,7 @@ function App() {
       <div className="m-8">
       <MyEditor />
       </div>
+      <Description/>
     </div>
   );
 }
