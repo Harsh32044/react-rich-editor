@@ -1,16 +1,14 @@
-
 import MyEditor from "./components/MyEditor";
+import Navbar from "./components/Navbar";
 
 function App() {
   return (
-    <>
+    <div className="flex flex-col justify-start h-dvh">
+      <Navbar />
       <div className="m-8">
-      <div className="font-semibold text-2xl text-center">
-        Demo Editor by Harsh
-      </div>
       <MyEditor />
       </div>
-    </>
+    </div>
   );
 }
 
