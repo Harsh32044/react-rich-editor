@@ -6,7 +6,8 @@ import {
   SelectionState,
   Modifier,
   convertFromRaw,
-  convertToRaw
+  convertToRaw,
+  getDefaultKeyBinding,
 } from "draft-js";
 import "draft-js/dist/Draft.css";
 import { useRef } from "react";
@@ -42,119 +43,43 @@ function MyEditor() {
 
   const editorRef = useRef(null);
 
-  const handleBeforeInput = (chars, editorState) => {
+  const styleText = (editorState, style) => {
     const selection = editorState.getSelection();
-    const content = editorState.getCurrentContent();
-    const blockKey = selection.getStartKey();
-    const currentBlock = content.getBlockForKey(blockKey);
-    const currentText = currentBlock.getText();
-
-    if (chars === " " && currentText.split(" ")[0] == "*") {
-      const newSelection = new SelectionState({
-        anchorKey: blockKey,
-        anchorOffset: currentText.length - 1,
-        focusKey: blockKey,
-        focusOffset: currentText.length,
-      });
-
-      const newContent = Modifier.removeRange(
-        content,
-        newSelection,
-        "backspace"
-      );
-      const newEditorState = EditorState.push(
-        editorState,
-        newContent,
-        "remove-range"
-      );
-      setEditorState(RichUtils.toggleInlineStyle(newEditorState, "BOLD"));
-      return "handled";
-    } else if (chars === " " && currentText.split(" ")[0] == "**") {
-      const newSelection = new SelectionState({
-        anchorKey: blockKey,
-        anchorOffset: currentText.length - 2,
-        focusKey: blockKey,
-        focusOffset: currentText.length,
-      });
-
-      const newContent = Modifier.removeRange(
-        content,
-        newSelection,
-        "backspace"
-      );
-      const newEditorState = EditorState.push(
-        editorState,
-        newContent,
-        "remove-range"
-      );
-      setEditorState(RichUtils.toggleInlineStyle(newEditorState, "RED"));
-      return "handled";
-    } else if (chars === " " && currentText.split(" ")[0] == "***") {
-      const newSelection = new SelectionState({
-        anchorKey: blockKey,
-        anchorOffset: currentText.length - 3,
-        focusKey: blockKey,
-        focusOffset: currentText.length,
-      });
-
-      const newContent = Modifier.removeRange(
-        content,
-        newSelection,
-        "backspace"
-      );
-      const newEditorState = EditorState.push(
-        editorState,
-        newContent,
-        "remove-range"
-      );
-      setEditorState(RichUtils.toggleInlineStyle(newEditorState, "UNDERLINE"));
-      return "handled";
-    } else if (chars === " " && currentText.split(" ")[0] == "#") {
-      const newSelection = new SelectionState({
-        anchorKey: blockKey,
-        anchorOffset: currentText.length - 1,
-        focusKey: blockKey,
-        focusOffset: currentText.length,
-      });
-
-      const newContent = Modifier.removeRange(
-        content,
-        newSelection,
-        "backspace"
-      );
-      const newEditorState = EditorState.push(
-        editorState,
-        newContent,
-        "remove-range"
-      );
-      setEditorState(RichUtils.toggleInlineStyle(newEditorState, "H1"));
-      return "handled";
-    } else if (chars === " " && currentText.split(" ")[0] == "```") {
-      const newSelection = new SelectionState({
-        anchorKey: blockKey,
-        anchorOffset: currentText.length - 3,
-        focusKey: blockKey,
-        focusOffset: currentText.length,
-      });
-
-      const newContent = Modifier.removeRange(
-        content,
-        newSelection,
-        "backspace"
-      );
-      const newEditorState = EditorState.push(
-        editorState,
-        newContent,
-        "remove-range"
-      );
-      setEditorState(RichUtils.toggleInlineStyle(newEditorState, "CODE"));
-      return "handled";
-    }
-    return "not-handled";
+    const contentState = editorState.getCurrentContent();
+    const currentBlockKey = selection.getStartKey();
+    const currentBlock = contentState.getBlockForKey(currentBlockKey);
+    const blockText = currentBlock.getText();
+    const newContentState = Modifier.replaceText(
+      contentState,
+      selection.merge({
+        anchorOffset: 0,
+        focusOffset: blockText.length,
+      }),
+      ""
+    );
+    const newEditorState = EditorState.push(
+      editorState,
+      newContentState,
+      "remove-text"
+    );
+    const newStateWithBold = RichUtils.toggleInlineStyle(newEditorState, style);
+    setEditorState(newStateWithBold);
+    return "handled";
   };
 
   const handleKeyCommand = (command, editorState) => {
-    if (command === "split-block") {
+    if (command === "bold-current-line") {
+      return styleText(editorState, "BOLD");
+    } else if (command === "red-current-line") {
+      return styleText(editorState, "RED");
+    } else if (command === "underline-current-line") {
+      return styleText(editorState, "UNDERLINE");
+    } else if (command === "h1-current-line") {
+      return styleText(editorState, "H1");
+    } else if (command == "code-current-line") {
+      return styleText(editorState, "CODE");
+    } else if (command === "split-block") {
+      removeAllInlineStyles(editorState, setEditorState);
       return "not-handled";
     }
     const newState = RichUtils.handleKeyCommand(editorState, command);
@@ -165,20 +90,57 @@ function MyEditor() {
     return "not-handled";
   };
 
-  const handleClick = (e) => {
-    e.preventDefault()
-    try {
-      const serializedState = JSON.stringify(convertToRaw(editorState.getCurrentContent()));
-      localStorage.setItem('editorState', serializedState);
-    } catch (error) {
-      console.error('Error saving editor state to localStorage:', error);
+  const removeAllInlineStyles = (editorState) => {
+    const currentStyle = editorState.getCurrentInlineStyle();
+    const ALL_STYLES = ["RED", "BOLD", "CODE", "H1", "UNDERLINE"];
+
+    ALL_STYLES.forEach((style) => {
+      if (currentStyle.has(style)) {
+        console.log(`Editor has ${style} style`);
+        setEditorState(RichUtils.toggleInlineStyle(editorState, style));
+      }
+    });
+  };
+
+  const keyBindingFn = (e) => {
+    const selectionState = editorState.getSelection();
+    const contentState = editorState.getCurrentContent();
+    const blockKey = selectionState.getAnchorKey();
+    const block = contentState.getBlockForKey(blockKey);
+
+    const lineText = block.getText();
+    if (e.key === " " && lineText == "*") {
+      return "bold-current-line";
+    } else if (e.key === " " && lineText == "**") {
+      return "red-current-line";
+    } else if (e.key === " " && lineText == "***") {
+      return "underline-current-line";
+    } else if (e.key === " " && lineText == "#") {
+      return "h1-current-line";
+    } else if (e.key === " " && lineText == "```") {
+      return "code-current-line";
     }
-  }
+    return getDefaultKeyBinding(e);
+  };
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    try {
+      const serializedState = JSON.stringify(
+        convertToRaw(editorState.getCurrentContent())
+      );
+      localStorage.setItem("editorState", serializedState);
+    } catch (error) {
+      console.error("Error saving editor state to localStorage:", error);
+    }
+  };
 
   return (
     <div className="">
-      <button className="rounded-md shadow-md shadow-blue-500 px-4 py-2 active:bg-gray-300"
-        onClick={handleClick}>
+      <button
+        className="rounded-md shadow-md shadow-blue-500 px-4 py-2 active:bg-gray-300"
+        onClick={handleClick}
+      >
         Save
       </button>
       <br />
@@ -188,9 +150,10 @@ function MyEditor() {
           customStyleMap={styleMap}
           editorState={editorState}
           handleKeyCommand={handleKeyCommand}
+          keyBindingFn={keyBindingFn}
           ref={editorRef}
           onChange={setEditorState}
-          handleBeforeInput={handleBeforeInput}
+          // handleBeforeInput={handleBeforeInput}
           placeholder="Your Ideas Go Here..."
           spellCheck={true}
         />
